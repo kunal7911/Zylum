@@ -196,11 +196,36 @@ const SAMPLE_PRODUCTS = [
 ];
 
 /* ── HELPERS ── */
+
+// FIX: Always coerce ingredients to strings — Open Food Facts sometimes returns objects
+function toIngStr(ing) {
+  if (!ing) return "";
+  if (typeof ing === "string") return ing;
+  // API occasionally returns {text:"...", percent:...} objects
+  if (typeof ing === "object" && ing.text) return String(ing.text);
+  return String(ing);
+}
+
+// FIX: Sanitize every product before use so the render never sees unexpected types
+function sanitizeProduct(p) {
+  return {
+    ...p,
+    name:     String(p.name     || "Unknown Product"),
+    brand:    String(p.brand    || "Unknown Brand"),
+    category: String(p.category || "Food"),
+    emoji:    p.emoji || "🛒",
+    ingredients: (p.ingredients || [])
+      .map(i => toIngStr(i).trim())
+      .filter(s => s.length > 0),
+  };
+}
+
 function computeScore(product, personalList) {
   let d = 0;
   const pl = personalList.map(p => p.toLowerCase().trim());
-  for (const ing of product.ingredients) {
-    const k = ing.toLowerCase().trim();
+  for (const raw of (product.ingredients || [])) {
+    const k = toIngStr(raw).toLowerCase().trim();
+    if (!k) continue;
     if (pl.includes(k)) { d += 30; continue; }
     const entry = HARMFUL_DB[k];
     if (entry) d += entry.risk==="high" ? 20 : entry.risk==="medium" ? 10 : 3;
@@ -224,7 +249,7 @@ function riskStyle(rk) {
 }
 function parseIngredients(text) {
   if (!text) return [];
-  return text
+  return String(text)
     .toLowerCase()
     .replace(/\*+/g, "")
     .replace(/\([^)]*\)/g, "")
@@ -274,89 +299,115 @@ function BottomNav({ active, onNavigate }) {
 
 /* ── SCANNER MODAL ── */
 function ScannerModal({ onClose, onProductFound }) {
-  const [status, setStatus] = useState("starting"); // starting | scanning | loading | error | https_required
+  const [status, setStatus] = useState("starting");
   const [errorMsg, setErrorMsg] = useState("");
-  const scannerRef = useRef(null);
-  const html5Ref = useRef(null);
+  const html5Ref  = useRef(null);
+  const mountedRef = useRef(true);  // FIX: track mount state to avoid setState after unmount
+  const stoppedRef = useRef(false); // FIX: track whether scanner already stopped to avoid double-stop
+
+  // Safe setState wrappers — no-op if unmounted
+  function safeSetStatus(s)   { if (mountedRef.current) setStatus(s); }
+  function safeSetError(msg)  { if (mountedRef.current) { setStatus("error"); setErrorMsg(msg); } }
+
+  function stopScanner() {
+    // FIX: Only stop once; html5-qrcode throws if you stop an already-stopped instance
+    if (html5Ref.current && !stoppedRef.current) {
+      stoppedRef.current = true;
+      html5Ref.current.stop().catch(()=>{});
+    }
+  }
 
   useEffect(() => {
-    if (!isHTTPS()) {
-      setStatus("https_required");
-      return;
-    }
+    mountedRef.current = true;
+    if (!isHTTPS()) { safeSetStatus("https_required"); return; }
+
     const timer = setTimeout(() => {
+      try {
+        const scanner = new Html5Qrcode("scanner-view");
+        html5Ref.current = scanner;
+        stoppedRef.current = false;
+        scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 260, height: 120 }, aspectRatio: 1.5 },
+          (code) => {
+            // FIX: synchronous stop, no await — avoids race with unmount cleanup
+            stopScanner();
+            safeSetStatus("loading");
+            fetchProduct(code);
+          },
+          () => {} // frame error — fires constantly, always ignore
+        )
+        .then(() => safeSetStatus("scanning"))
+        .catch(() => safeSetError("Camera permission denied. Please allow camera access in your browser settings, then try again."));
+      } catch(e) {
+        safeSetError("Could not start scanner. Please try again.");
+      }
+    }, 300);
+
+    return () => {
+      mountedRef.current = false; // FIX: mark unmounted before any async callbacks fire
+      clearTimeout(timer);
+      stopScanner();              // FIX: safe — checks stoppedRef, won't double-stop
+    };
+  }, []);
+
+  async function fetchProduct(barcode) {
+    try {
+      const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await res.json();
+      if (data.status === 1 && data.product) {
+        const p    = data.product;
+        const name = String(p.product_name_en || p.product_name || "Unknown Product");
+        const brand= String(p.brands || "Unknown Brand");
+        // FIX: prefer structured ingredients array (.text field) over raw text for cleaner parsing
+        let ingredients = [];
+        if (Array.isArray(p.ingredients) && p.ingredients.length > 0) {
+          ingredients = p.ingredients
+            .map(i => (typeof i === "object" ? String(i.text||"") : String(i||"")))
+            .map(s => s.toLowerCase().replace(/\*+/g,"").trim())
+            .filter(s => s.length > 1 && s.length < 80)
+            .slice(0, 40);
+        }
+        if (ingredients.length === 0) {
+          const rawText = p.ingredients_text_en || p.ingredients_text || "";
+          ingredients = parseIngredients(rawText);
+        }
+        const cats  = p.categories_tags || [];
+        const emoji = cats.some(c=>c.includes("beverages")) ? "🥤"
+                    : cats.some(c=>c.includes("snack"))     ? "🍪"
+                    : cats.some(c=>c.includes("dairy"))     ? "🥛"
+                    : cats.some(c=>c.includes("cereal"))    ? "🌾" : "🛒";
+        const category = String((cats[0]||"food").replace(/^[a-z]{2}:/,""));
+        // FIX: sanitize the whole object before handing it to the app
+        onProductFound(sanitizeProduct({
+          id: barcode, name, brand, category, emoji,
+          ingredients: ingredients.length > 0 ? ingredients : ["ingredients not listed"],
+          isScanned: true,
+        }));
+      } else {
+        safeSetError("Product not found in the Open Food Facts database. Try scanning another item.");
+      }
+    } catch(e) {
+      safeSetError("Network error. Make sure you're connected to the internet and try again.");
+    }
+  }
+
+  function handleRetry() {
+    stopScanner();
+    stoppedRef.current = false;
+    safeSetStatus("starting");
+    setTimeout(() => {
+      if (!mountedRef.current) return;
       try {
         const scanner = new Html5Qrcode("scanner-view");
         html5Ref.current = scanner;
         scanner.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 260, height: 120 }, aspectRatio: 1.5 },
-          async (code) => {
-            await scanner.stop().catch(()=>{});
-            setStatus("loading");
-            fetchProduct(code);
-          },
+          (code) => { stopScanner(); safeSetStatus("loading"); fetchProduct(code); },
           () => {}
-        )
-        .then(() => setStatus("scanning"))
-        .catch(err => {
-          setStatus("error");
-          setErrorMsg("Camera permission denied. Please allow camera access in your browser settings, then try again.");
-        });
-      } catch(e) {
-        setStatus("error");
-        setErrorMsg("Could not start scanner. Please try again.");
-      }
-    }, 300);
-    return () => {
-      clearTimeout(timer);
-      if (html5Ref.current) html5Ref.current.stop().catch(()=>{});
-    };
-  }, []);
-
-  async function fetchProduct(barcode) {
-    try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-      const data = await res.json();
-      if (data.status === 1 && data.product) {
-        const p = data.product;
-        const name = p.product_name_en || p.product_name || "Unknown Product";
-        const brand = p.brands || "Unknown Brand";
-        const rawText = p.ingredients_text_en || p.ingredients_text || p.ingredients_text_with_allergens || "";
-        const ingredients = parseIngredients(rawText);
-        const emoji = p.ecoscore_grade === "a" ? "🌿" :
-                      (p.categories_tags||[]).some(c=>c.includes("beverages")) ? "🥤" :
-                      (p.categories_tags||[]).some(c=>c.includes("snack")) ? "🍪" :
-                      (p.categories_tags||[]).some(c=>c.includes("dairy")) ? "🥛" : "🛒";
-        onProductFound({
-          id: barcode, name, brand,
-          category: (p.categories_tags||["food"])[0].replace(/^[a-z]{2}:/,""),
-          emoji,
-          ingredients: ingredients.length > 0 ? ingredients : ["ingredients not available"],
-          isScanned: true,
-        });
-      } else {
-        setStatus("error");
-        setErrorMsg("Product not found in the Open Food Facts database. Try scanning another item.");
-      }
-    } catch(e) {
-      setStatus("error");
-      setErrorMsg("Network error. Make sure you're connected to the internet and try again.");
-    }
-  }
-
-  function handleRetry() {
-    if (html5Ref.current) html5Ref.current.stop().catch(()=>{});
-    setStatus("starting");
-    setTimeout(() => {
-      const scanner = new Html5Qrcode("scanner-view");
-      html5Ref.current = scanner;
-      scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 260, height: 120 }, aspectRatio: 1.5 },
-        async (code) => { await scanner.stop().catch(()=>{}); setStatus("loading"); fetchProduct(code); },
-        () => {}
-      ).then(()=>setStatus("scanning")).catch(()=>{ setStatus("error"); setErrorMsg("Could not start camera."); });
+        ).then(()=>safeSetStatus("scanning")).catch(()=>safeSetError("Could not start camera."));
+      } catch(e) { safeSetError("Could not start scanner."); }
     }, 400);
   }
 
@@ -441,7 +492,8 @@ function App() {
   );
 
   function openProduct(p) {
-    setProduct(p); setActiveTab("ingredients"); setScreen("product");
+    // FIX: always sanitize before storing — guarantees strings throughout
+    setProduct(sanitizeProduct(p)); setActiveTab("ingredients"); setScreen("product");
   }
   function addIng() {
     const v = newIng.trim();
@@ -529,10 +581,34 @@ function App() {
 
   /* ── PRODUCT DETAIL ── */
   if (screen === "product" && product) {
-    const score = computeScore(product, personalList);
-    const pl = personalList.map(p=>p.toLowerCase().trim());
-    const flaggedCount = product.ingredients.filter(i=>HARMFUL_DB[i.toLowerCase()]).length;
-    const personalCount = pl.filter(p=>product.ingredients.map(i=>i.toLowerCase()).includes(p)).length;
+    // FIX: catch any rendering error and show a friendly fallback instead of blank screen
+    let renderError = null;
+    let score, pl, flaggedCount, personalCount;
+    try {
+      score = computeScore(product, personalList);
+      pl = personalList.map(p => p.toLowerCase().trim());
+      flaggedCount  = product.ingredients.filter(i => HARMFUL_DB[toIngStr(i).toLowerCase()]).length;
+      personalCount = pl.filter(p => product.ingredients.map(i => toIngStr(i).toLowerCase()).includes(p)).length;
+    } catch(e) {
+      renderError = e.message;
+    }
+    if (renderError) return (
+      <div className="screen"><div className="phone">
+        <div className="header-indigo">
+          <div className="back-row">
+            <button className="back-btn" onClick={()=>setScreen("home")}>←</button>
+            <h2 style={{color:"#fff",fontWeight:800,fontSize:18}}>Something went wrong</h2>
+          </div>
+        </div>
+        <div className="empty" style={{paddingTop:60}}>
+          <div className="empty-icon">😕</div>
+          <p className="empty-title">Couldn't load this product</p>
+          <p className="empty-sub">The product data from the database was in an unexpected format.</p>
+          <button onClick={()=>setScreen("home")} style={{marginTop:20,background:"#4f46e5",color:"#fff",padding:"12px 24px",borderRadius:14,fontWeight:700,fontSize:14}}>← Back to Home</button>
+        </div>
+        <BottomNav active="home" onNavigate={setScreen}/>
+      </div></div>
+    );
 
     return (
       <div className="screen">
@@ -567,7 +643,8 @@ function App() {
             ))}
           </div>
           <div className="section" style={{paddingTop:16}}>
-            {activeTab==="ingredients" && product.ingredients.map((ing,i)=>{
+            {activeTab==="ingredients" && product.ingredients.map((raw,i)=>{
+              const ing = toIngStr(raw);           // FIX: always a string
               const key = ing.toLowerCase().trim();
               const isPersonal = pl.includes(key);
               const db = HARMFUL_DB[key];
@@ -577,7 +654,7 @@ function App() {
                 <div key={i} className={`ing-item ${c.bg}`}>
                   <span className={`ing-dot ${c.dot}`}></span>
                   <div style={{flex:1}}>
-                    <p className={`ing-name ${c.text}`}>{ing}</p>
+                    <p className={`ing-name ${c.text}`}>{ing || "unknown ingredient"}</p>
                     {db && <p className="ing-reason">{db.reason}</p>}
                     {isPersonal && <p className={`ing-alert ${c.text}`}>⚠️ On your personal alert list!</p>}
                   </div>
@@ -586,8 +663,8 @@ function App() {
               );
             })}
             {activeTab==="allergens" && (() => {
-              const flags = product.ingredients.filter(ing=>{
-                const k = ing.toLowerCase().trim();
+              const flags = product.ingredients.filter(raw=>{
+                const k = toIngStr(raw).toLowerCase().trim(); // FIX: coerce to string
                 return pl.includes(k)||(HARMFUL_DB[k]&&HARMFUL_DB[k].risk==="high");
               });
               if (!flags.length) return (
@@ -597,7 +674,8 @@ function App() {
                   <p className="empty-sub">This product looks clean for you.</p>
                 </div>
               );
-              return flags.map((ing,i)=>{
+              return flags.map((raw,i)=>{
+                const ing = toIngStr(raw);           // FIX: coerce to string
                 const key = ing.toLowerCase().trim();
                 const isPersonal = pl.includes(key);
                 const db = HARMFUL_DB[key];
