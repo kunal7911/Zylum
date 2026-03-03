@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="ScanSafe" />
+  <title>ScanSafe</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f3f4f6;overscroll-behavior:none}
+    input,button{font-family:inherit}
+    button{cursor:pointer;border:none;background:none}
+    input{border:none;outline:none}
+
+    .screen{min-height:100dvh;display:flex;justify-content:center;background:#f3f4f6}
+    .phone{width:100%;max-width:430px;background:#fff;min-height:100dvh;display:flex;flex-direction:column;box-shadow:0 0 40px rgba(0,0,0,.12);position:relative}
+
+    .header-indigo{background:#4f46e5;padding:52px 20px 24px}
+    .header-purple{background:#7c3aed;padding:52px 20px 24px}
+    .hdr-sub{color:#c7d2fe;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+    .hdr-title{color:#fff;font-size:22px;font-weight:800}
+    .hdr-desc{color:#c7d2fe;font-size:13px;margin-top:4px}
+
+    .search-wrap{margin-top:16px;position:relative}
+    .search-input{width:100%;background:#fff;border-radius:14px;padding:13px 40px 13px 16px;font-size:14px;color:#1f2937;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+    .search-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:18px}
+
+    .scan-area{padding:16px 20px}
+    .scan-btn{width:100%;background:#eef2ff;border:2px dashed #818cf8;border-radius:20px;padding:20px;display:flex;flex-direction:column;align-items:center;color:#4f46e5;transition:background .2s}
+    .scan-btn:active{background:#e0e7ff}
+    .scan-icon{font-size:40px;margin-bottom:4px}
+    .scan-label{font-weight:700;font-size:14px}
+    .scan-sub{font-size:12px;color:#818cf8;margin-top:2px}
+
+    .alert-banner{margin:0 20px;background:#faf5ff;border:1px solid #ddd6fe;border-radius:14px;padding:12px 16px;display:flex;align-items:center;gap:12px}
+    .alert-edit{margin-left:auto;font-size:12px;font-weight:700;color:#7c3aed;background:#ede9fe;padding:6px 12px;border-radius:999px;white-space:nowrap}
+    .alert-edit:active{background:#ddd6fe}
+
+    .section{padding:16px 20px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    .section-label{font-size:11px;font-weight:800;color:#9ca3af;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+
+    .product-card{background:#fff;border:1px solid #f3f4f6;border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);transition:box-shadow .2s;text-align:left;width:100%;margin-bottom:10px}
+    .product-card:active{box-shadow:0 4px 12px rgba(0,0,0,.1)}
+    .product-name{font-weight:700;color:#111827;font-size:14px}
+    .product-brand{font-size:12px;color:#9ca3af;margin-top:2px}
+    .score-good{color:#16a34a} .score-avg{color:#ca8a04} .score-poor{color:#dc2626}
+
+    .score-card{margin:-16px 20px 0;background:#fff;border-radius:18px;box-shadow:0 4px 16px rgba(0,0,0,.1);padding:16px 20px;display:flex;align-items:center;gap:16px;border:1px solid #f3f4f6;position:relative;z-index:1}
+    .score-ring-wrap{display:flex;flex-direction:column;align-items:center}
+    .score-ring-container{position:relative;width:90px;height:90px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+    .score-ring-svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+    .score-ring-num{font-size:24px;font-weight:800;position:relative;z-index:1}
+    .score-ring-label{margin-top:4px;font-size:12px;font-weight:700}
+    .score-ring-good-bg{background:#f0fdf4;box-shadow:0 0 0 4px #86efac}
+    .score-ring-avg-bg{background:#fefce8;box-shadow:0 0 0 4px #fde047}
+    .score-ring-poor-bg{background:#fef2f2;box-shadow:0 0 0 4px #fca5a5}
+
+    .tabs{display:flex;margin:16px 20px 0;background:#f3f4f6;border-radius:14px;padding:4px}
+    .tab-btn{flex:1;font-size:12px;font-weight:700;padding:9px;border-radius:11px;color:#9ca3af;transition:all .2s}
+    .tab-btn.active{background:#fff;color:#4f46e5;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+
+    .ing-item{border-radius:14px;padding:12px 16px;display:flex;align-items:flex-start;gap:12px;margin-bottom:8px}
+    .ing-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+    .ing-name{font-weight:700;font-size:14px;text-transform:capitalize}
+    .ing-reason{font-size:12px;color:#6b7280;margin-top:3px;line-height:1.4}
+    .ing-alert{font-size:12px;font-weight:800;margin-top:3px}
+    .ing-badge{font-size:11px;font-weight:800;flex-shrink:0;white-space:nowrap}
+
+    .risk-high-bg{background:#fee2e2}.risk-high-text{color:#b91c1c}.risk-high-dot{background:#ef4444}
+    .risk-medium-bg{background:#fef9c3}.risk-medium-text{color:#a16207}.risk-medium-dot{background:#facc15}
+    .risk-low-bg{background:#f0fdf4}.risk-low-text{color:#15803d}.risk-low-dot{background:#86efac}
+    .risk-safe-bg{background:#f9fafb}.risk-safe-text{color:#374151}.risk-safe-dot{background:#d1d5db}
+    .risk-personal-bg{background:#f5f3ff}.risk-personal-text{color:#6d28d9}.risk-personal-dot{background:#8b5cf6}
+
+    .flag-card{background:#fee2e2;border:1px solid #fecaca;border-radius:14px;padding:14px 16px;margin-bottom:10px}
+    .flag-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .flag-name{font-size:14px;font-weight:800;color:#991b1b;flex:1;text-transform:capitalize}
+    .flag-label{font-size:11px;font-weight:800;color:#991b1b;white-space:nowrap}
+    .flag-reason{font-size:12px;color:#4b5563;line-height:1.4}
+    .flag-personal{font-size:12px;font-weight:800;color:#6d28d9;margin-top:4px}
+
+    .add-row{display:flex;gap:8px;padding:16px 20px 0}
+    .add-input{flex:1;background:#f3f4f6;border-radius:14px;padding:13px 16px;font-size:14px;color:#1f2937}
+    .add-btn{background:#7c3aed;color:#fff;padding:13px 18px;border-radius:14px;font-weight:800;font-size:14px}
+    .add-btn:active{background:#6d28d9}
+    .add-hint{font-size:12px;color:#9ca3af;margin:6px 20px 0}
+    .list-item{background:#faf5ff;border:1px solid #ede9fe;border-radius:14px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .list-item-dot{width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0}
+    .list-item-name{flex:1;font-size:14px;font-weight:600;color:#4c1d95;text-transform:capitalize}
+    .list-item-del{color:#d1d5db;font-size:22px;font-weight:700;line-height:1;padding:0 4px}
+    .list-item-del:active{color:#ef4444}
+    .how-box{background:#eef2ff;border:1px solid #c7d2fe;border-radius:14px;padding:16px;margin-top:20px}
+    .how-title{font-size:12px;font-weight:800;color:#3730a3;margin-bottom:6px}
+    .how-text{font-size:12px;color:#4f46e5;line-height:1.6}
+
+    .bottom-nav{border-top:1px solid #f3f4f6;background:#fff;display:flex;justify-content:space-around;padding:10px 24px max(20px,env(safe-area-inset-bottom))}
+    .nav-btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 20px;border-radius:14px}
+    .nav-btn:active{background:#f3f4f6}
+    .nav-icon{font-size:22px}
+    .nav-label{font-size:11px;font-weight:700}
+    .nav-active{color:#4f46e5}
+    .nav-inactive{color:#9ca3af}
+
+    .back-row{display:flex;align-items:flex-start;gap:10px}
+    .back-btn{color:#fff;font-size:22px;padding-top:2px}
+
+    .empty{text-align:center;padding:48px 20px}
+    .empty-icon{font-size:48px;margin-bottom:8px}
+    .empty-title{color:#374151;font-weight:700;font-size:15px}
+    .empty-sub{color:#9ca3af;font-size:13px;margin-top:4px}
+
+    /* ── SCANNER MODAL ── */
+    .scanner-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:env(safe-area-inset-top)}
+    .scanner-topbar{width:100%;display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:rgba(0,0,0,.4)}
+    .scanner-topbar-title{color:#fff;font-weight:800;font-size:17px}
+    .scanner-close{color:#fff;font-size:26px;font-weight:300;line-height:1;padding:4px 8px}
+    .scanner-hint{color:rgba(255,255,255,.7);font-size:13px;text-align:center;padding:12px 20px}
+    .scanner-frame-wrap{width:100%;max-width:340px;position:relative;margin:0 auto}
+    #scanner-view{width:100%;border-radius:16px;overflow:hidden}
+    #scanner-view video{width:100%!important;border-radius:16px}
+    .scanner-corners{position:absolute;inset:0;pointer-events:none}
+    .corner{position:absolute;width:28px;height:28px;border-color:#4f46e5;border-style:solid}
+    .corner-tl{top:0;left:0;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+    .corner-tr{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+    .corner-bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
+    .corner-br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
+    .scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#818cf8,transparent);animation:scanline 2s ease-in-out infinite}
+    @keyframes scanline{0%{top:8%}50%{top:88%}100%{top:8%}}
+
+    .scanner-status{margin:20px;background:rgba(255,255,255,.12);border-radius:16px;padding:20px;text-align:center;width:calc(100% - 40px);max-width:340px}
+    .scanner-status-icon{font-size:40px;margin-bottom:8px}
+    .scanner-status-title{color:#fff;font-weight:800;font-size:16px}
+    .scanner-status-sub{color:rgba(255,255,255,.6);font-size:13px;margin-top:6px;line-height:1.5}
+    .scanner-retry{margin-top:14px;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px}
+    .scanner-retry:active{background:#4338ca}
+
+    .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.2);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .https-warning{margin:0 20px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:12px;padding:10px 14px;font-size:12px;color:#92400e;line-height:1.5}
+    .https-warning strong{display:block;font-weight:800;margin-bottom:2px}
+
+    .off-badge{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:8px 12px;margin:0 20px 12px;font-size:12px;color:#166534;display:flex;align-items:center;gap:8px}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* ── DATA ── */
+const HARMFUL_DB = {
+  "sodium lauryl sulfate":      { risk:"high",   reason:"Skin irritant, linked to mouth ulcers and disruption of skin barrier." },
+  "high fructose corn syrup":   { risk:"high",   reason:"Linked to obesity, diabetes, and metabolic disorders." },
+  "aspartame":                  { risk:"medium", reason:"Artificial sweetener; some studies suggest neurological concerns." },
+  "sodium nitrate":             { risk:"high",   reason:"Preservative linked to increased cancer risk when consumed regularly." },
+  "red 40":                     { risk:"medium", reason:"Artificial dye; may cause hyperactivity in sensitive children." },
+  "yellow 5":                   { risk:"medium", reason:"Artificial dye; linked to allergic reactions in some people." },
+  "yellow 6":                   { risk:"medium", reason:"Artificial dye; may cause hypersensitivity reactions." },
+  "bha":                        { risk:"high",   reason:"Preservative listed as a possible human carcinogen." },
+  "bht":                        { risk:"medium", reason:"Preservative; some evidence of hormonal disruption." },
+  "carrageenan":                { risk:"medium", reason:"Thickener linked to gut inflammation in some individuals." },
+  "monosodium glutamate":       { risk:"medium", reason:"May cause headaches and sensitivity reactions in some people." },
+  "potassium bromate":          { risk:"high",   reason:"Flour additive banned in many countries; potential carcinogen." },
+  "partially hydrogenated oils":{ risk:"high",   reason:"Source of trans fats; increases heart disease risk." },
+  "titanium dioxide":           { risk:"medium", reason:"Color additive; under review for potential genotoxicity." },
+  "sodium benzoate":            { risk:"medium", reason:"May form benzene (a carcinogen) when combined with vitamin C." },
+  "propylene glycol":           { risk:"low",    reason:"Generally safe but can accumulate in large amounts." },
+  "sucralose":                  { risk:"low",    reason:"Artificial sweetener; may affect gut microbiome over time." },
+  "acesulfame potassium":       { risk:"medium", reason:"Artificial sweetener with limited long-term safety data." },
+  "acesulfame k":               { risk:"medium", reason:"Artificial sweetener with limited long-term safety data." },
+  "sodium nitrite":             { risk:"high",   reason:"Preservative linked to increased cancer risk when consumed regularly." },
+  "potassium sorbate":          { risk:"low",    reason:"Preservative; generally safe but may cause mild sensitivity." },
+  "calcium propionate":         { risk:"low",    reason:"Preservative; some research links it to irritability in children." },
+  "artificial flavors":         { risk:"low",    reason:"Umbrella term for synthetic compounds; limited disclosure." },
+  "maltodextrin":               { risk:"medium", reason:"Highly processed starch; high glycemic index, may spike blood sugar." },
+};
+
+const SAMPLE_PRODUCTS = [
+  { id:1, name:"Oreo Cookies",       brand:"Nabisco",       category:"Snacks",   emoji:"🍪",
+    ingredients:["enriched flour","sugar","palm oil","cocoa powder","high fructose corn syrup","leavening agents","salt","soy lecithin","artificial flavors","yellow 5"] },
+  { id:2, name:"Pringles Original",  brand:"Kellogg's",     category:"Chips",    emoji:"🥔",
+    ingredients:["dried potatoes","vegetable oil","rice flour","maltodextrin","salt","monosodium glutamate","dextrose","sodium benzoate","bha"] },
+  { id:3, name:"Diet Coke",          brand:"Coca-Cola",     category:"Beverages",emoji:"🥤",
+    ingredients:["carbonated water","caramel color","aspartame","phosphoric acid","potassium benzoate","natural flavors","citric acid","acesulfame k"] },
+  { id:4, name:"Greek Yogurt",       brand:"Chobani",       category:"Dairy",    emoji:"🥛",
+    ingredients:["cultured nonfat milk","live cultures","water","natural flavors","fruit pectin","locust bean gum"] },
+  { id:5, name:"Honey Nut Cheerios", brand:"General Mills", category:"Cereals",  emoji:"🌾",
+    ingredients:["whole grain oats","sugar","oat bran","modified corn starch","honey","brown sugar syrup","salt","calcium carbonate","yellow 6","red 40","bht"] },
+];
+
+/* ── HELPERS ── */
+function computeScore(product, personalList) {
+  let d = 0;
+  const pl = personalList.map(p => p.toLowerCase().trim());
+  for (const ing of product.ingredients) {
+    const k = ing.toLowerCase().trim();
+    if (pl.includes(k)) { d += 30; continue; }
+    const entry = HARMFUL_DB[k];
+    if (entry) d += entry.risk==="high" ? 20 : entry.risk==="medium" ? 10 : 3;
+  }
+  return Math.max(0, 100 - d);
+}
+function scoreClass(s) {
+  if (s >= 75) return { num:"score-good", ring:"score-ring-good-bg", stroke:"#16a34a", label:"Good" };
+  if (s >= 45) return { num:"score-avg",  ring:"score-ring-avg-bg",  stroke:"#ca8a04", label:"Average" };
+  return             { num:"score-poor", ring:"score-ring-poor-bg", stroke:"#dc2626", label:"Poor" };
+}
+function riskStyle(rk) {
+  const m = {
+    high:    { bg:"risk-high-bg",     text:"risk-high-text",     dot:"risk-high-dot",     badge:"High Risk" },
+    medium:  { bg:"risk-medium-bg",   text:"risk-medium-text",   dot:"risk-medium-dot",   badge:"Moderate" },
+    low:     { bg:"risk-low-bg",      text:"risk-low-text",      dot:"risk-low-dot",      badge:"Low Risk" },
+    safe:    { bg:"risk-safe-bg",     text:"risk-safe-text",     dot:"risk-safe-dot",     badge:"Safe" },
+    personal:{ bg:"risk-personal-bg", text:"risk-personal-text", dot:"risk-personal-dot", badge:"Your Allergen" },
+  };
+  return m[rk] || m.safe;
+}
+function parseIngredients(text) {
+  if (!text) return [];
+  return text
+    .toLowerCase()
+    .replace(/\*+/g, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/contains?:?[^,;]*/gi, "")
+    .split(/[,;]/)
+    .map(s => s.trim().replace(/^[\s\-\.]+|[\s\-\.]+$/g,""))
+    .filter(s => s.length > 1 && s.length < 80)
+    .slice(0, 40);
+}
+function isHTTPS() {
+  return location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+}
+
+/* ── SCORE RING ── */
+function ScoreRing({ score }) {
+  const { num, ring, stroke, label } = scoreClass(score);
+  const r = 34, circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  return (
+    <div className="score-ring-wrap">
+      <div className={`score-ring-container ${ring}`}>
+        <svg className="score-ring-svg" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r={r} fill="none" stroke="#e5e7eb" strokeWidth="6"/>
+          <circle cx="40" cy="40" r={r} fill="none" stroke={stroke} strokeWidth="6"
+            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"/>
+        </svg>
+        <span className={`score-ring-num ${num}`}>{score}</span>
+      </div>
+      <span className={`score-ring-label ${num}`}>{label}</span>
+    </div>
+  );
+}
+
+/* ── BOTTOM NAV ── */
+function BottomNav({ active, onNavigate }) {
+  return (
+    <div className="bottom-nav">
+      {[{id:"home",icon:"🏠",label:"Home"},{id:"mylist",icon:"⚠️",label:"My List"}].map(t=>(
+        <button key={t.id} className={`nav-btn ${active===t.id?"nav-active":"nav-inactive"}`} onClick={()=>onNavigate(t.id)}>
+          <span className="nav-icon">{t.icon}</span>
+          <span className="nav-label">{t.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── SCANNER MODAL ── */
+function ScannerModal({ onClose, onProductFound }) {
+  const [status, setStatus] = useState("starting"); // starting | scanning | loading | error | https_required
+  const [errorMsg, setErrorMsg] = useState("");
+  const scannerRef = useRef(null);
+  const html5Ref = useRef(null);
+
+  useEffect(() => {
+    if (!isHTTPS()) {
+      setStatus("https_required");
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        const scanner = new Html5Qrcode("scanner-view");
+        html5Ref.current = scanner;
+        scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 260, height: 120 }, aspectRatio: 1.5 },
+          async (code) => {
+            await scanner.stop().catch(()=>{});
+            setStatus("loading");
+            fetchProduct(code);
+          },
+          () => {}
+        )
+        .then(() => setStatus("scanning"))
+        .catch(err => {
+          setStatus("error");
+          setErrorMsg("Camera permission denied. Please allow camera access in your browser settings, then try again.");
+        });
+      } catch(e) {
+        setStatus("error");
+        setErrorMsg("Could not start scanner. Please try again.");
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      if (html5Ref.current) html5Ref.current.stop().catch(()=>{});
+    };
+  }, []);
+
+  async function fetchProduct(barcode) {
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await res.json();
+      if (data.status === 1 && data.product) {
+        const p = data.product;
+        const name = p.product_name_en || p.product_name || "Unknown Product";
+        const brand = p.brands || "Unknown Brand";
+        const rawText = p.ingredients_text_en || p.ingredients_text || p.ingredients_text_with_allergens || "";
+        const ingredients = parseIngredients(rawText);
+        const emoji = p.ecoscore_grade === "a" ? "🌿" :
+                      (p.categories_tags||[]).some(c=>c.includes("beverages")) ? "🥤" :
+                      (p.categories_tags||[]).some(c=>c.includes("snack")) ? "🍪" :
+                      (p.categories_tags||[]).some(c=>c.includes("dairy")) ? "🥛" : "🛒";
+        onProductFound({
+          id: barcode, name, brand,
+          category: (p.categories_tags||["food"])[0].replace(/^[a-z]{2}:/,""),
+          emoji,
+          ingredients: ingredients.length > 0 ? ingredients : ["ingredients not available"],
+          isScanned: true,
+        });
+      } else {
+        setStatus("error");
+        setErrorMsg("Product not found in the Open Food Facts database. Try scanning another item.");
+      }
+    } catch(e) {
+      setStatus("error");
+      setErrorMsg("Network error. Make sure you're connected to the internet and try again.");
+    }
+  }
+
+  function handleRetry() {
+    if (html5Ref.current) html5Ref.current.stop().catch(()=>{});
+    setStatus("starting");
+    setTimeout(() => {
+      const scanner = new Html5Qrcode("scanner-view");
+      html5Ref.current = scanner;
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 260, height: 120 }, aspectRatio: 1.5 },
+        async (code) => { await scanner.stop().catch(()=>{}); setStatus("loading"); fetchProduct(code); },
+        () => {}
+      ).then(()=>setStatus("scanning")).catch(()=>{ setStatus("error"); setErrorMsg("Could not start camera."); });
+    }, 400);
+  }
+
+  return (
+    <div className="scanner-overlay">
+      <div className="scanner-topbar">
+        <span className="scanner-topbar-title">📷 Scan Barcode</span>
+        <button className="scanner-close" onClick={onClose}>✕</button>
+      </div>
+
+      {status === "https_required" && (
+        <div className="scanner-status" style={{marginTop:40}}>
+          <div className="scanner-status-icon">🔒</div>
+          <div className="scanner-status-title">HTTPS Required</div>
+          <div className="scanner-status-sub">
+            Camera access requires a secure connection.<br/><br/>
+            <strong style={{color:"#fff"}}>To enable scanning on iPhone:</strong><br/>
+            1. Go to <strong style={{color:"#818cf8"}}>netlify.com/drop</strong> on your computer<br/>
+            2. Drag & drop the <strong style={{color:"#818cf8"}}>scansafe-app.html</strong> file<br/>
+            3. Open the free HTTPS link on your iPhone ✅
+          </div>
+        </div>
+      )}
+
+      {(status === "starting" || status === "scanning") && (
+        <>
+          <p className="scanner-hint">Point your camera at a product barcode</p>
+          <div className="scanner-frame-wrap" ref={scannerRef}>
+            <div id="scanner-view"></div>
+            {status === "scanning" && (
+              <div className="scanner-corners">
+                <div className="corner corner-tl"></div>
+                <div className="corner corner-tr"></div>
+                <div className="corner corner-bl"></div>
+                <div className="corner corner-br"></div>
+                <div className="scan-line"></div>
+              </div>
+            )}
+          </div>
+          {status === "starting" && (
+            <div className="scanner-status" style={{background:"transparent"}}>
+              <div className="spinner"></div>
+              <div className="scanner-status-title">Starting camera…</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {status === "loading" && (
+        <div className="scanner-status" style={{marginTop:40}}>
+          <div className="spinner"></div>
+          <div className="scanner-status-title">Looking up product…</div>
+          <div className="scanner-status-sub">Searching Open Food Facts database</div>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="scanner-status" style={{marginTop:40}}>
+          <div className="scanner-status-icon">😕</div>
+          <div className="scanner-status-title">Scan Failed</div>
+          <div className="scanner-status-sub">{errorMsg}</div>
+          <button className="scanner-retry" onClick={handleRetry}>Try Again</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── MAIN APP ── */
+function App() {
+  const [screen, setScreen]         = useState("home");
+  const [query, setQuery]           = useState("");
+  const [product, setProduct]       = useState(null);
+  const [personalList, setPersonalList] = useState(["peanut oil","milk","soy lecithin"]);
+  const [newIng, setNewIng]         = useState("");
+  const [activeTab, setActiveTab]   = useState("ingredients");
+  const [showScanner, setShowScanner] = useState(false);
+
+  const filtered = SAMPLE_PRODUCTS.filter(p =>
+    p.name.toLowerCase().includes(query.toLowerCase()) ||
+    p.brand.toLowerCase().includes(query.toLowerCase())
+  );
+
+  function openProduct(p) {
+    setProduct(p); setActiveTab("ingredients"); setScreen("product");
+  }
+  function addIng() {
+    const v = newIng.trim();
+    if (v && !personalList.map(x=>x.toLowerCase()).includes(v.toLowerCase()))
+      setPersonalList([...personalList, v]);
+    setNewIng("");
+  }
+
+  /* ── HOME ── */
+  if (screen === "home") return (
+    <div className="screen">
+      <div className="phone">
+        {showScanner && (
+          <ScannerModal
+            onClose={() => setShowScanner(false)}
+            onProductFound={p => { setShowScanner(false); openProduct(p); }}
+          />
+        )}
+        <div className="header-indigo">
+          <p className="hdr-sub">Welcome back, Kunal</p>
+          <h1 className="hdr-title">🔍 ScanSafe</h1>
+          <p className="hdr-desc">Know what's really in your food</p>
+          <div className="search-wrap">
+            <input className="search-input" placeholder="Search sample products…"
+              value={query} onChange={e=>setQuery(e.target.value)}/>
+            <span className="search-icon">🔎</span>
+          </div>
+        </div>
+
+        <div className="scan-area">
+          <button className="scan-btn" onClick={() => setShowScanner(true)}>
+            <span className="scan-icon">📷</span>
+            <span className="scan-label">Tap to Scan a Real Barcode</span>
+            <span className="scan-sub">Powered by Open Food Facts · millions of products</span>
+          </button>
+        </div>
+
+        {!isHTTPS() && (
+          <div className="https-warning">
+            <strong>⚠️ Camera needs HTTPS to work on iPhone</strong>
+            Deploy to <strong>netlify.com/drop</strong> (free, 60 sec) to enable live scanning.
+          </div>
+        )}
+
+        <div className="alert-banner">
+          <span style={{fontSize:24}}>⚠️</span>
+          <div>
+            <p style={{fontSize:12,fontWeight:800,color:"#6d28d9"}}>Personal Alerts Active</p>
+            <p style={{fontSize:12,color:"#a78bfa",marginTop:2}}>{personalList.length} ingredients on your watch list</p>
+          </div>
+          <button className="alert-edit" onClick={()=>setScreen("mylist")}>Edit</button>
+        </div>
+
+        <div className="section">
+          <p className="section-label">{query ? "Search Results" : "Sample Products — or scan a real one ↑"}</p>
+          {filtered.map(p => {
+            const score = computeScore(p, personalList);
+            const { num, label } = scoreClass(score);
+            return (
+              <button key={p.id} className="product-card" onClick={()=>openProduct(p)}>
+                <span style={{fontSize:32}}>{p.emoji}</span>
+                <div style={{flex:1}}>
+                  <p className="product-name">{p.name}</p>
+                  <p className="product-brand">{p.brand} · {p.category}</p>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <p className={`${num}`} style={{fontSize:20,fontWeight:800}}>{score}</p>
+                  <p className={`${num}`} style={{fontSize:11,fontWeight:700}}>{label}</p>
+                </div>
+              </button>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="empty">
+              <div className="empty-icon">🔍</div>
+              <p className="empty-title">No sample products found</p>
+              <p className="empty-sub">Scan a real barcode above!</p>
+            </div>
+          )}
+        </div>
+        <BottomNav active="home" onNavigate={setScreen}/>
+      </div>
+    </div>
+  );
+
+  /* ── PRODUCT DETAIL ── */
+  if (screen === "product" && product) {
+    const score = computeScore(product, personalList);
+    const pl = personalList.map(p=>p.toLowerCase().trim());
+    const flaggedCount = product.ingredients.filter(i=>HARMFUL_DB[i.toLowerCase()]).length;
+    const personalCount = pl.filter(p=>product.ingredients.map(i=>i.toLowerCase()).includes(p)).length;
+
+    return (
+      <div className="screen">
+        <div className="phone">
+          <div className="header-indigo">
+            <div className="back-row">
+              <button className="back-btn" onClick={()=>setScreen("home")}>←</button>
+              <div style={{flex:1}}>
+                <p style={{color:"#c7d2fe",fontSize:12}}>{product.brand}{product.isScanned?" · Scanned":""}</p>
+                <h2 style={{color:"#fff",fontWeight:800,fontSize:18,lineHeight:1.2}}>{product.name}</h2>
+              </div>
+              <span style={{fontSize:40}}>{product.emoji}</span>
+            </div>
+          </div>
+          <div className="score-card">
+            <ScoreRing score={score}/>
+            <div style={{flex:1}}>
+              <p style={{fontWeight:800,color:"#111827",fontSize:14}}>Your Personalized Score</p>
+              <p style={{fontSize:12,color:"#9ca3af",marginTop:4,lineHeight:1.4}}>
+                {flaggedCount} flagged + {personalCount} personal allergen{personalCount!==1?"s":""} found
+              </p>
+              <button onClick={()=>setScreen("mylist")} style={{marginTop:8,fontSize:12,color:"#4f46e5",fontWeight:700,background:"#eef2ff",padding:"5px 12px",borderRadius:999}}>
+                ✏️ Edit My List
+              </button>
+            </div>
+          </div>
+          <div className="tabs">
+            {["ingredients","allergens"].map(t=>(
+              <button key={t} className={`tab-btn ${activeTab===t?"active":""}`} onClick={()=>setActiveTab(t)}>
+                {t==="ingredients" ? "🧪 All Ingredients" : "⚠️ Flags & Alerts"}
+              </button>
+            ))}
+          </div>
+          <div className="section" style={{paddingTop:16}}>
+            {activeTab==="ingredients" && product.ingredients.map((ing,i)=>{
+              const key = ing.toLowerCase().trim();
+              const isPersonal = pl.includes(key);
+              const db = HARMFUL_DB[key];
+              const rk = isPersonal ? "personal" : db ? db.risk : "safe";
+              const c = riskStyle(rk);
+              return (
+                <div key={i} className={`ing-item ${c.bg}`}>
+                  <span className={`ing-dot ${c.dot}`}></span>
+                  <div style={{flex:1}}>
+                    <p className={`ing-name ${c.text}`}>{ing}</p>
+                    {db && <p className="ing-reason">{db.reason}</p>}
+                    {isPersonal && <p className={`ing-alert ${c.text}`}>⚠️ On your personal alert list!</p>}
+                  </div>
+                  <span className={`ing-badge ${c.text}`}>{c.badge}</span>
+                </div>
+              );
+            })}
+            {activeTab==="allergens" && (() => {
+              const flags = product.ingredients.filter(ing=>{
+                const k = ing.toLowerCase().trim();
+                return pl.includes(k)||(HARMFUL_DB[k]&&HARMFUL_DB[k].risk==="high");
+              });
+              if (!flags.length) return (
+                <div className="empty">
+                  <div className="empty-icon">✅</div>
+                  <p className="empty-title" style={{color:"#16a34a"}}>No major flags!</p>
+                  <p className="empty-sub">This product looks clean for you.</p>
+                </div>
+              );
+              return flags.map((ing,i)=>{
+                const key = ing.toLowerCase().trim();
+                const isPersonal = pl.includes(key);
+                const db = HARMFUL_DB[key];
+                return (
+                  <div key={i} className="flag-card">
+                    <div className="flag-row">
+                      <span style={{width:8,height:8,borderRadius:"50%",background:"#ef4444",flexShrink:0,marginTop:2}}></span>
+                      <p className="flag-name">{ing}</p>
+                      <span className="flag-label">{isPersonal?"Your Allergen":"High Risk"}</span>
+                    </div>
+                    {db && <p className="flag-reason">{db.reason}</p>}
+                    {isPersonal && <p className="flag-personal">⚠️ You added this to your personal list.</p>}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <BottomNav active="home" onNavigate={setScreen}/>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── MY LIST ── */
+  if (screen === "mylist") return (
+    <div className="screen">
+      <div className="phone">
+        <div className="header-purple">
+          <h2 className="hdr-title">⚠️ My Allergen List</h2>
+          <p className="hdr-desc">These ingredients lower your personal score</p>
+        </div>
+        <div className="add-row">
+          <input className="add-input" placeholder="Add ingredient (e.g. 'peanuts')"
+            value={newIng} onChange={e=>setNewIng(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&addIng()}/>
+          <button className="add-btn" onClick={addIng}>Add</button>
+        </div>
+        <p className="add-hint">Tap Add or press Enter. Not case-sensitive.</p>
+        <div className="section" style={{paddingTop:16}}>
+          <p className="section-label">Your list ({personalList.length})</p>
+          {personalList.length===0 && (
+            <div className="empty">
+              <div className="empty-icon">📋</div>
+              <p className="empty-title">No allergens added yet</p>
+              <p className="empty-sub">Add ingredients you want to avoid above.</p>
+            </div>
+          )}
+          {personalList.map((item,i)=>(
+            <div key={i} className="list-item">
+              <span className="list-item-dot"></span>
+              <p className="list-item-name">{item}</p>
+              <button className="list-item-del" onClick={()=>setPersonalList(personalList.filter(p=>p!==item))}>×</button>
+            </div>
+          ))}
+          <div className="how-box">
+            <p className="how-title">💡 How Scoring Works</p>
+            <p className="how-text">
+              Products start at 100. High-risk ingredients deduct 20 pts, moderate deduct 10 pts.
+              Ingredients on <strong>your personal list</strong> deduct 30 pts — the heaviest penalty —
+              so your allergies always show up clearly.
+            </p>
+          </div>
+        </div>
+        <BottomNav active="mylist" onNavigate={setScreen}/>
+      </div>
+    </div>
+  );
+
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
